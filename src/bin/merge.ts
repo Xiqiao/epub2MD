@@ -15,12 +15,11 @@ const writeFile = promisify(fs.writeFile)
 export async function mergeMarkdowns(directory: string, outputFile?: string | undefined): Promise<string> {
   try {
     // 如果没有指定输出文件名，则使用目录名
-    const finalOutputFile = outputFile || `${path.basename(directory)}-merged.md`
-    const outputPath = path.join(directory, finalOutputFile)
 
     // 先获取目录中所有符合要求的markdown文件
     // 始终使用这个逻辑检查带有数字前缀的文件（01-xxx.md）
     const files = await readdir(directory)
+    const outputFileName = outputFile ? path.basename(outputFile) : undefined
     let markdownFiles = files
       .filter(file => {
         // 只选择有序号前缀的markdown文件
@@ -38,7 +37,7 @@ export async function mergeMarkdowns(directory: string, outputFile?: string | un
       markdownFiles = files
         .filter(file => {
           return file.endsWith('.md') && 
-                 file !== finalOutputFile && 
+                 (!outputFileName || file !== outputFileName) && 
                  !file.endsWith('-merged.md')
         })
         .sort();
@@ -47,6 +46,26 @@ export async function mergeMarkdowns(directory: string, outputFile?: string | un
     if (markdownFiles.length === 0) {
       throw new Error('No Markdown file was found!')
     }
+
+    const buildMergedFileName = () => {
+      const first = markdownFiles[0]
+      const last = markdownFiles[markdownFiles.length - 1]
+      const firstMatch = first.match(/^(\d+)-(.+)\.md$/)
+      const lastMatch = last.match(/^(\d+)-(.+)\.md$/)
+
+      if (firstMatch && lastMatch) {
+        const start = firstMatch[1]
+        const end = lastMatch[1]
+        const baseName = firstMatch[2]
+        return `${start}-${end}-${baseName}.md`
+      }
+
+      const fallbackBase = path.parse(first).name
+      return `${fallbackBase}-merged.md`
+    }
+
+    const finalOutputFile = outputFile || buildMergedFileName()
+    const outputPath = path.join(directory, finalOutputFile)
     
     // 合并文件内容
     let mergedContent = ''

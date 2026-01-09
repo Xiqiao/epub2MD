@@ -2,6 +2,7 @@
 import args from 'args'
 import process from 'node:process'
 import fs from 'node:fs'
+import path from 'node:path'
 import parseEpub from '../parseEpub'
 import { Converter } from './convert'
 import { mergeMarkdowns } from './merge'
@@ -9,6 +10,14 @@ import logger from '../logger'
 import { expandWildcard } from './utils'
 
 const name = 'epub2md'
+const DEFAULT_INPUT_DIR = 'raw_book'
+const DEFAULT_ROOT_DIR = 'root_folder'
+
+function resolveInputPattern(input: string): string {
+  if (path.isAbsolute(input)) return input
+  if (input.includes('/') || input.includes('\\')) return input
+  return path.join(process.cwd(), DEFAULT_ROOT_DIR, DEFAULT_INPUT_DIR, input)
+}
 
 export const Commands = {
   convert: 'convert',
@@ -68,16 +77,17 @@ let hasRun = false
 for (const cmd of [Commands.info, Commands.structure, Commands.sections]) {
   if (flags[cmd]) {
     // Ensure the path is a string
-    if (typeof flags[cmd] !== 'string') {
-      if (unprocessedArgs.length > 0) {
-        flags[cmd] = unprocessedArgs[0]
+      if (typeof flags[cmd] !== 'string') {
+        if (unprocessedArgs.length > 0) {
+          flags[cmd] = unprocessedArgs[0]
+        }
       }
-    }
 
-    if (typeof flags[cmd] === 'string') {
-      // Note: Info commands currently don't support wildcards to keep output manageable
-      // If wildcard support is needed, the run function would need to handle it
-      run(cmd)
+      if (typeof flags[cmd] === 'string') {
+        flags[cmd] = resolveInputPattern(flags[cmd])
+        // Note: Info commands currently don't support wildcards to keep output manageable
+        // If wildcard support is needed, the run function would need to handle it
+        run(cmd)
       hasRun = true
       break
     }
@@ -94,9 +104,10 @@ if (!hasRun && flags[Commands.unzip]) {
         : null
 
   if (epubPath) {
+    const resolvedEpubPath = resolveInputPattern(epubPath)
     logger.info('unzipping...')
 
-    new Converter(epubPath)
+    new Converter(resolvedEpubPath)
       .run({
         cmd: Commands.unzip, // Use cmd to indicate unzip only
         mergedFilename: undefined,
@@ -177,7 +188,7 @@ async function run(cmd: CommandType) {
     }
 
     // Expand wildcard patterns
-    const epubFiles = await expandWildcard(epubPath)
+    const epubFiles = await expandWildcard(resolveInputPattern(epubPath))
 
     if (epubFiles.length === 0) {
       logger.error(`No files found matching pattern: ${epubPath}`)

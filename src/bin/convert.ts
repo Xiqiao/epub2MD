@@ -15,8 +15,10 @@ interface Structure {
   id: string
   type: 'md' | 'img' | ''
   orderLabel: string
+  orderIndex: number
   outpath: string
   filepath: string
+  title?: string
 }
 
 interface RunOptions {
@@ -49,8 +51,9 @@ export class Converter {
    */
   constructor(epubPath: string) {
     this.epubFilePath = epubPath
-    this.outDir = dirname(epubPath)
-    if (!existsSync(this.outDir)) mkdirSync(this.outDir)
+    const bookName = getClearFilename(basename(epubPath, '.epub'))
+    this.outDir = join(process.cwd(), 'root_folder', 'output_book', bookName)
+    if (!existsSync(this.outDir)) mkdirSync(this.outDir, { recursive: true })
   }
 
 
@@ -82,6 +85,68 @@ export class Converter {
       fileName,
       outDir,
       outPath: join(outDir, orderLabel + '-' + fileName)
+    }
+  }
+
+  private extractTitleFromMarkdown(md: string) {
+    if (!md) return ''
+    const withoutFrontmatter = md.replace(/^\uFEFF?---[\s\S]*?---\s*/, '')
+    const lines = withoutFrontmatter.split(/\r?\n/)
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed) continue
+      if (trimmed.startsWith('#')) {
+        return trimmed.replace(/^#+\s*/, '').trim()
+      }
+      return trimmed
+    }
+    return ''
+  }
+
+  private cleanTitle(raw: string) {
+    return raw
+      .replace(/[\\/:*?"<>|\[\]\(\)\{\}]/g, '')
+      .replace(/[，。！？：；、·“”‘’]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
+
+  private clearOutpathWithTitle(structure: Structure) {
+    const { id, outpath, orderLabel, title } = structure
+    const navName = (() => {
+      function _matchNav(navId: Structure['id'], tocItems?: TOCItem[]): TOCItem | undefined {
+        if (Array.isArray(tocItems))
+          for (let i = 0; i < tocItems.length; i++) {
+            const item = tocItems[i]
+            if (item.sectionId === navId) {
+              return item
+            }
+            if (item.children) {
+              const childMatch = _matchNav(navId, item.children)
+              if (childMatch) {
+                return childMatch
+              }
+            }
+          }
+        return undefined
+      }
+      return _matchNav(id, this.epub!.structure)?.name
+    })()
+
+    const preferred = title
+      ? this.cleanTitle(title)
+      : navName
+        ? navName
+        : basename(outpath)
+
+    const nameWithExt = extname(preferred) ? preferred : preferred + this.MD_FILE_EXT
+    const fileName = getClearFilename(nameWithExt)
+    const outDir = dirname(outpath)
+
+    return {
+      fileName,
+      outDir,
+      outPath: join(outDir, orderLabel + '-' + fileName),
     }
   }
 
@@ -128,13 +193,27 @@ export class Converter {
     this.epub = await parseEpub(this.epubFilePath, {
       convertToMarkdown: convertHTML
     })
-    this.outDir = this.epubFilePath.replace('.epub', '')
+    // output dir is set in constructor
 
-    // for numbered output,and file's internal link
-    let num = 0
-    const padding = Math.floor(
-      Math.log10(this.epub?.sections?.length ?? 0)
-    );
+    const flattenToc = (items?: TOCItem[], acc: string[] = []) => {
+      if (!items) return acc
+      const sorted = [...items].sort((a, b) => Number(a.playOrder) - Number(b.playOrder))
+      for (const item of sorted) {
+        acc.push(item.sectionId)
+        if (item.children) {
+          flattenToc(item.children, acc)
+        }
+      }
+      return acc
+    }
+    const tocOrder = flattenToc(this.epub?.structure)
+    const tocIndex = new Map<string, number>()
+    tocOrder.forEach((id, idx) => tocIndex.set(id, idx))
+    const spineIndex = this.epub.getSpine()
+    let fallbackIndex = 0
+
+    const mdItems: Structure[] = []
+    const otherItems: Structure[] = []
     for (const { href: filepath, id } of this.epub.getManifest()) {
       let outpath = '', type: Structure['type'] = ''
       // simply unzip
@@ -147,18 +226,52 @@ export class Converter {
         type = file.type
       }
       if (type !== '') {
-        this.structure.push({
-          // current only label markdown file
-          orderLabel: type === 'md'
-            ? (num++, ('0'.repeat(padding) + num).slice(-(padding + 1))) : '',
+        const orderIndex = type === 'md'
+          ? (tocIndex.has(id)
+            ? tocIndex.get(id)!
+            : (spineIndex[id] ?? (100000 + (fallbackIndex++))))
+          : -1
+
+        const item: Structure = {
+          orderLabel: '',
+          orderIndex,
           id,
           type,
           outpath,
-          filepath
-        })
+          filepath,
+        }
 
+        if (type === 'md') {
+          mdItems.push(item)
+        } else {
+          otherItems.push(item)
+        }
       }
     }
+
+    mdItems.sort((a, b) => a.orderIndex - b.orderIndex)
+    const padding = Math.floor(Math.log10(mdItems.length || 1))
+    let num = 0
+    for (const item of mdItems) {
+      num++
+      item.orderLabel = ('0'.repeat(padding) + num).slice(-(padding + 1))
+      const canUseSection =
+        tocIndex.has(item.id) || spineIndex[item.id] !== undefined
+      if (canUseSection) {
+        try {
+          const section = this.epub?.getSection(item.id)
+          if (section) {
+            const rawTitle = this.extractTitleFromMarkdown(section.toMarkdown())
+            const cleaned = this.cleanTitle(rawTitle)
+            item.title = cleaned || undefined
+          }
+        } catch (error) {
+          logger.warn(`Failed to read section title for ${item.id}`, error)
+        }
+      }
+    }
+
+    this.structure = [...mdItems, ...otherItems]
   }
 
   /**
@@ -203,13 +316,25 @@ export class Converter {
     const needAutoCorrect = this.cmd === Commands.autocorrect
 
     if (type === 'md') {
-      const section = this.epub?.getSection(id)
-      if (section) {
-        content = section.toMarkdown()
+      try {
+        const section = this.epub?.getSection(id)
+        if (section) {
+          content = section.toMarkdown()
+        }
+      } catch (error) {
+        logger.warn(`Failed to load section ${id}, skipping`, error)
+        return {
+          id,
+          type,
+          filepath,
+          content: '',
+          links,
+          outFilePath: outpath,
+        }
       }
 
-      // clear readable filename
-      const { outPath, fileName } = this.clearOutpath(structure)
+      // clear readable filename (prefer title)
+      const { outPath, fileName } = this.clearOutpathWithTitle(structure)
       outpath = outPath
 
       // resources links
@@ -240,8 +365,8 @@ export class Converter {
           // Adjust internal link adjustment, files with numbers in the name
           for (const sfile of this.structure) {
             if (sectionId === sfile.id) {
-              validPath = basename(this.clearOutpath(sfile).outPath)
-              break;
+              validPath = basename(this.clearOutpathWithTitle(sfile).outPath)
+              break
             }
           }
 
@@ -361,8 +486,10 @@ export class Converter {
     }
 
     // Generate merged file name
+    const mergedDir = join(this.outDir, 'merged')
+    if (!existsSync(mergedDir)) mkdirSync(mergedDir, { recursive: true })
     const outputPath = join(
-      this.outDir,
+      mergedDir,
       this.mergedFilename || `${basename(this.outDir)}-merged.md`
     )
     // Write merged content

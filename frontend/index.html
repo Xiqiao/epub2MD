@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>epub2md - Wireframe Console</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">epub2md</div>
+      <div class="hint">Minimal, black/white wireframe UI for local workflows</div>
+      <div class="actions">
+        <button id="pick-root" class="btn">Pick Root Folder</button>
+        <button id="refresh" class="btn">Refresh Lists</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel input">
+        <h2>Input</h2>
+        <div class="card book-files">
+          <div class="row">
+            <div class="label">Raw folder</div>
+            <div id="raw-path" class="value">raw_epub</div>
+          </div>
+          <div id="dropzone" class="dropzone">
+            <div class="drop-title">Drop EPUB files here</div>
+            <div class="drop-sub">or use the add button</div>
+            <button id="add-files" class="btn">Add Files</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>Raw EPUB list</h3>
+            <div class="inline-actions">
+              <button id="select-all-raw" class="btn ghost">Select all</button>
+              <button id="convert-selected" class="btn">Convert selected</button>
+            </div>
+          </div>
+          <ul id="raw-list" class="list"></ul>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>Queue</h3>
+            <div class="inline-actions">
+              <button id="clear-queue" class="btn ghost">Clear</button>
+            </div>
+          </div>
+          <ul id="queue" class="list compact"></ul>
+          <div class="progress">
+            <div class="progress-bar" id="progress-bar"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>Log</h3>
+            <div class="inline-actions">
+              <button id="clear-log" class="btn ghost">Clear</button>
+            </div>
+          </div>
+          <pre id="log" class="log"></pre>
+        </div>
+      </section>
+
+      <section class="panel output">
+        <h2>Output</h2>
+        <div class="card">
+          <div class="row">
+            <div class="label">Book folder</div>
+            <div id="book-path" class="value">book</div>
+          </div>
+          <div class="card-header">
+            <h3>Books</h3>
+            <div class="inline-actions">
+              <button id="refresh-books" class="btn ghost">Refresh</button>
+              <button id="delete-book" class="btn danger">Delete book</button>
+            </div>
+          </div>
+          <ul id="book-list" class="list"></ul>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3 id="book-files-title">Book files</h3>
+            <div class="inline-actions">
+              <button id="merge-md" class="btn">Merge</button>
+              <button id="delete-md-selected" class="btn danger">Delete</button>
+              <button id="rename-md" class="btn">Rename</button>
+            </div>
+          </div>
+          <ul id="md-list" class="list"></ul>
+        </div>
+      </section>
+
+      <section class="panel preview">
+        <h2>Preview</h2>
+        <div class="card preview-card">
+          <div class="card-header">
+            <h3 id="preview-title">No file selected</h3>
+            <div class="inline-actions">
+              <button id="delete-md" class="btn danger">Delete md</button>
+            </div>
+          </div>
+          <pre id="preview" class="preview"></pre>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div>Wireframe only. Use File System Access API when available.</div>
+    </footer>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
