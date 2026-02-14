@@ -1,6 +1,6 @@
 import { extname } from 'node:path';
-import convert from '../converter';
-import { sanitizeFileName } from '../utils';
+import convert from '../converter.js';
+import { sanitizeFileName } from '../utils.js';
 
 /**
  * Matches the image syntax in Markdown
@@ -14,7 +14,7 @@ function handleImagePath(markdownContent: string, replaceFn: (imgUrl: string) =>
     const newImagePath = replaceFn(imagePath);
 
     // 用新路径重构图片语法
-    return `![${match.slice(2, match.indexOf(']'))}](${newImagePath})`;
+    return `![[${newImagePath}]]`;
   });
 }
 
@@ -43,9 +43,9 @@ export function fixLinkPath(result: string, replaceFn: (url: string, isText?: bo
   }
 
   // 首先处理图片标签 ![text](url)
-  result = result.replace(/!\[(.*?)\]\(([^)]+)\)/g, (match, alt, url) => {
+  result = result.replace(/!\[(.*?)\]\(([^)]+)\)/g, (_match, _alt, url) => {
     const newUrl = replaceFn(url, false);
-    return `![${alt}](${newUrl})`;
+    return `![[${newUrl}]]`;
   });
 
   // 然后处理普通链接，使用否定前瞻确保不匹配图片链接

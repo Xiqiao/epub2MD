@@ -2,12 +2,12 @@ import fs from 'node:fs'
 import { Buffer } from 'node:buffer'
 import _ from 'lodash'
 
-import type { ParserOptions, GeneralObject } from './types'
+import type { ParserOptions, GeneralObject } from './types.js'
 // @ts-ignore
 import nodeZip from 'node-zip'
-import parseLink from './parseLink'
-import parseSection, { Section } from './parseSection'
-import { xmlToJson, determineRoot } from './utils'
+import parseLink from './parseLink.js'
+import parseSection, { Section } from './parseSection.js'
+import { xmlToJson, determineRoot } from './utils.js'
 
 type MetaInfo = Partial<{
   title: string,
@@ -18,6 +18,15 @@ type MetaInfo = Partial<{
   rights: string,
 }>
 
+const readMetaText = (value: unknown): string => {
+  if (typeof value === 'string') return value
+  if (!value || typeof value !== 'object') return ''
+  const obj = value as Record<string, unknown>
+  if (typeof obj['#text'] === 'string') return obj['#text']
+  if (typeof obj['_'] === 'string') return obj['_']
+  return ''
+}
+
 const parseMetadata = (metadata: GeneralObject = {}): MetaInfo => {
   const meta = metadata;
   const info: MetaInfo = {};
@@ -26,16 +35,20 @@ const parseMetadata = (metadata: GeneralObject = {}): MetaInfo => {
     if (item === 'author') {
       const author = _.get(meta, ['dc:creator'], [])
       if (_.isArray(author)) {
-        info.author = author.map((a) => a['#text'])
+        const names = author.map(readMetaText).filter((name) => name)
+        if (names.length) info.author = names
       } else {
-        info.author = [author?.['#text']]
+        const name = readMetaText(author)
+        if (name) info.author = [name]
       }
     }
     else if (item === 'description') {
-      info.description = _.get(meta, [item, '_'])
+      info.description = readMetaText(_.get(meta, ['dc:description'])) || _.get(meta, [item, '_'])
     }
     else {
-      info[item] = _.get(meta, ['dc:' + item]) as string
+      const value = _.get(meta, ['dc:' + item])
+      const text = readMetaText(value)
+      if (text) info[item] = text
     }
   })
 

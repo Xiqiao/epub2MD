@@ -1,15 +1,15 @@
 import { basename, dirname, extname, format, join, parse } from 'node:path'
-import { existsSync, mkdirSync, readv } from 'node:fs'
-import logger, { name } from '../logger'
+import { existsSync, mkdirSync, readdirSync, rmdirSync, readv } from 'node:fs'
+import logger, { name } from '../logger.js'
 import _ from 'lodash'
 import { writeFileSync } from 'write-file-safe'
 
-import parseEpub from '../parseEpub'
-import type { Epub, TOCItem } from '../parseEpub'
-import { checkFileType, convertHTML, fixLinkPath, getClearFilename, resolveHTMLId } from './helper'
-import { matchTOC } from '../utils'
-import parseHref from '../parseLink'
-import { Commands, type CommandType } from './cli'
+import parseEpub from '../parseEpub.js'
+import type { Epub, TOCItem } from '../parseEpub.js'
+import { checkFileType, convertHTML, fixLinkPath, getClearFilename, resolveHTMLId } from './helper.js'
+import { matchTOC } from '../utils.js'
+import parseHref from '../parseLink.js'
+import { Commands, type CommandType } from './cli.js'
 
 interface Structure {
   id: string
@@ -33,6 +33,7 @@ export class Converter {
   epubFilePath: string // current epub 's path
 
   outDir: string  // epub 's original directory to save markdown files
+  legacyOutDir: string
   mergedFilename?: string // The merged file name
 
   // include images/html/css/js in the epub file
@@ -42,7 +43,7 @@ export class Converter {
   shouldMerge: boolean = false// Whether to directly generate the merged file
   localize: boolean = false // Whether to retain the original online image link
 
-  IMAGE_DIR: string = 'images' // The directory to save images
+  IMAGE_DIR: string = 'assets' // The directory to save images
   MD_FILE_EXT: string = '.md' as const // out file extname
 
   /**
@@ -53,7 +54,40 @@ export class Converter {
     this.epubFilePath = epubPath
     const bookName = getClearFilename(basename(epubPath, '.epub'))
     this.outDir = join(process.cwd(), 'root_folder', 'output_book', bookName)
+    this.legacyOutDir = this.outDir
+  }
+
+  private cleanupLegacyOutDir() {
+    if (!this.legacyOutDir || this.legacyOutDir === this.outDir) return
+    if (!existsSync(this.legacyOutDir)) return
+    const entries = readdirSync(this.legacyOutDir)
+    if (entries.length === 0) {
+      rmdirSync(this.legacyOutDir)
+    }
+  }
+
+  private pickPreferredAuthor(author?: string | string[]) {
+    if (!author) return ''
+    const list = Array.isArray(author) ? author : [author]
+    const cleaned = list.map((item) => (item || '').trim()).filter(Boolean)
+    if (!cleaned.length) return ''
+    const english = cleaned.find((item) => /[A-Za-z]/.test(item))
+    return english || cleaned[0]
+  }
+
+  private resolveOutputDirFromMeta() {
+    const info = this.epub?.info
+    const title = info?.title
+      ? info.title.replace(/[()（）][^()（）]*[()（）]/g, '').trim()
+      : ''
+    const author = this.pickPreferredAuthor(info?.author)
+    const fallback = getClearFilename(basename(this.epubFilePath, '.epub'))
+    const baseTitle = title || fallback
+    const rawName = author ? `${baseTitle}-${author}` : baseTitle
+    const cleanName = getClearFilename(rawName) || fallback
+    this.outDir = join(process.cwd(), 'root_folder', 'output_book', cleanName)
     if (!existsSync(this.outDir)) mkdirSync(this.outDir, { recursive: true })
+    this.cleanupLegacyOutDir()
   }
 
 
@@ -193,7 +227,7 @@ export class Converter {
     this.epub = await parseEpub(this.epubFilePath, {
       convertToMarkdown: convertHTML
     })
-    // output dir is set in constructor
+    this.resolveOutputDirFromMeta()
 
     const flattenToc = (items?: TOCItem[], acc: string[] = []) => {
       if (!items) return acc
@@ -389,7 +423,7 @@ export class Converter {
           if (link.startsWith('http')) {
             resLinks.push(link)
           }
-          return './' + this.IMAGE_DIR + '/' + basename(link)
+          return this.IMAGE_DIR + '/' + basename(link)
         }
       })
 
@@ -488,10 +522,9 @@ export class Converter {
     // Generate merged file name
     const mergedDir = join(this.outDir, 'merged')
     if (!existsSync(mergedDir)) mkdirSync(mergedDir, { recursive: true })
-    const outputPath = join(
-      mergedDir,
-      this.mergedFilename || `${basename(this.outDir)}-merged.md`
-    )
+    const baseName = this.mergedFilename || `${basename(this.outDir)}-merged.md`
+    const prefix = basename(this.outDir)
+    const outputPath = join(mergedDir, `${prefix}-${baseName}`)
     // Write merged content
     writeFileSync(outputPath, mergedContent, { overwrite: true })
     return outputPath

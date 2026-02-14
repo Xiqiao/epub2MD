@@ -1,4 +1,4 @@
-import _last from 'lodash/last'
+import _last from 'lodash/last.js'
 
 /**
  * Parse the URL link and extract its components.

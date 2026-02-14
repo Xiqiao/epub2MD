@@ -4,6 +4,7 @@ let rootLabel = 'root_folder';
 
 const state = {
   rawFiles: [],
+  rawOtherFiles: [],
   books: [],
   mdFiles: [],
   queue: [],
@@ -14,6 +15,7 @@ const state = {
 const $ = (id) => document.getElementById(id);
 
 const rawList = $('raw-list');
+const rawOtherList = $('raw-other-list');
 const bookList = $('book-list');
 const mdList = $('md-list');
 const queueList = $('queue');
@@ -160,6 +162,26 @@ async function refreshRawList() {
   }
 }
 
+async function refreshRawOtherList() {
+  try {
+    const response = await fetch('/api/epub2md/raw-non-epub');
+    if (!response.ok) {
+      log(`Raw non-epub list failed: ${response.status}`);
+      return;
+    }
+    const data = await response.json();
+    state.rawOtherFiles = (data.files || []).map((file) => ({
+      name: file.name,
+      selected: false,
+      meta: file.ext ? file.ext : 'file',
+    }));
+    renderList(rawOtherList, state.rawOtherFiles);
+    log(`Loaded ${state.rawOtherFiles.length} raw non-epub files.`);
+  } catch (error) {
+    log(`Raw non-epub list error: ${error?.message || error}`);
+  }
+}
+
 async function refreshBookList() {
   try {
     const response = await fetch('/api/epub2md/books');
@@ -182,6 +204,7 @@ async function refreshBookList() {
 
 async function refreshAll() {
   await refreshRawList();
+  await refreshRawOtherList();
   await refreshBookList();
   state.mdFiles = [];
   renderList(mdList, []);
@@ -250,6 +273,14 @@ function buildSelectedSummary(items) {
 
 function updateSelectedMdSummary() {
   updateSelectedMdCount();
+  const rows = mdList.querySelectorAll('li:not(.list-select-all)');
+  rows.forEach((row, index) => {
+    const checkbox = row.querySelector('input[type="checkbox"]');
+    if (!checkbox) return;
+    if (state.mdFiles[index]) {
+      state.mdFiles[index].selected = checkbox.checked;
+    }
+  });
   const selectAllMeta = mdList.querySelector('.list-select-all .meta');
   if (selectAllMeta) {
     selectAllMeta.textContent = buildSelectedSummary(state.mdFiles);
@@ -447,9 +478,66 @@ function bindEvents() {
   $('pick-root').addEventListener('click', pickRoot);
   $('refresh').addEventListener('click', refreshAll);
   $('refresh-books').addEventListener('click', refreshBookList);
+  $('convert-books-simple').addEventListener('click', async () => {
+    const selected = state.books.filter((book) => book.selected);
+    if (!selected.length) {
+      log('No book folders selected.');
+      return;
+    }
+
+    const jobs = selected.map((book) => ({
+      book,
+      job: enqueue(`繁转简 ${book.name}`),
+    }));
+
+    try {
+      const response = await fetch('/api/epub2md/convert-books-to-simple', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ books: selected.map((book) => book.name) }),
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        jobs.forEach(({ job }) => {
+          job.done = true;
+        });
+        renderQueue();
+        log(`繁转简 failed: ${response.status} ${text}`);
+        return;
+      }
+
+      const data = await response.json();
+      const results = data.results || [];
+      results.forEach((result) => {
+        const match = jobs.find(({ book }) => book.name === result.name);
+        if (match) {
+          match.job.done = true;
+        }
+        if (result.ok) {
+          log(`繁转简完成 ${result.name} -> ${result.target} (${result.count} files)`);
+        } else {
+          const detail = result.error || (result.errors && result.errors.length ? `${result.errors.length} errors` : 'see errors');
+          log(`繁转简失败 ${result.name}: ${detail}`);
+        }
+      });
+      renderQueue();
+      await refreshBookList();
+    } catch (error) {
+      jobs.forEach(({ job }) => {
+        job.done = true;
+      });
+      renderQueue();
+      log(`繁转简 error: ${error?.message || error}`);
+    }
+  });
   $('select-all-raw').addEventListener('click', () => {
     selectAll(state.rawFiles);
     renderList(rawList, state.rawFiles);
+  });
+  $('select-all-other').addEventListener('click', () => {
+    selectAll(state.rawOtherFiles);
+    renderList(rawOtherList, state.rawOtherFiles);
   });
   $('clear-log').addEventListener('click', clearLog);
   $('clear-queue').addEventListener('click', () => {
@@ -507,6 +595,59 @@ function bindEvents() {
       });
       renderQueue();
       log(`Conversion error: ${error?.message || error}`);
+    }
+  });
+  $('convert-to-epub').addEventListener('click', async () => {
+    const selected = state.rawOtherFiles.filter((file) => file.selected);
+    if (!selected.length) {
+      log('No raw non-epub selected.');
+      return;
+    }
+
+    const jobs = selected.map((file) => ({
+      file,
+      job: enqueue(`Convert to EPUB ${file.name}`),
+    }));
+
+    try {
+      const response = await fetch('/api/epub2md/convert-to-epub', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: selected.map((file) => file.name) }),
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        jobs.forEach(({ job }) => {
+          job.done = true;
+        });
+        renderQueue();
+        log(`Convert to EPUB failed: ${response.status} ${text}`);
+        return;
+      }
+
+      const data = await response.json();
+      const results = data.results || [];
+      results.forEach((result) => {
+        const match = jobs.find(({ file }) => file.name === result.name);
+        if (match) {
+          match.job.done = true;
+        }
+        if (result.ok) {
+          log(`Converted to epub ${result.name}`);
+        } else {
+          log(`Failed ${result.name}: ${result.error || result.stderr || 'unknown error'}`);
+        }
+      });
+      renderQueue();
+      await refreshRawOtherList();
+      await refreshRawList();
+    } catch (error) {
+      jobs.forEach(({ job }) => {
+        job.done = true;
+      });
+      renderQueue();
+      log(`Convert to EPUB error: ${error?.message || error}`);
     }
   });
   $('merge-md').addEventListener('click', () => {

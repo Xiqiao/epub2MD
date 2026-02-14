@@ -1,7 +1,7 @@
 import _ from 'lodash'
 import { XMLParser } from 'fast-xml-parser'
-import { GeneralObject } from './types'
-import type { TOCItem } from './parseEpub'
+import { GeneralObject } from './types.js'
+import type { TOCItem } from './parseEpub.js'
 
 
 export interface TraverseNestedObject {

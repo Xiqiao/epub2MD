@@ -1,7 +1,7 @@
 import { JSDOM } from 'jsdom'
 import _ from 'lodash'
-import { traverseNestedObject } from './utils'
-import { HtmlNodeObject, GeneralObject } from './types'
+import { traverseNestedObject } from './utils.js'
+import { HtmlNodeObject, GeneralObject } from './types.js'
 
 const OMITTED_TAGS = ['head', 'input', 'textarea', 'script', 'style', 'svg']
 const UNWRAP_TAGS = ['body', 'html', 'div', 'span']

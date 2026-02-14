@@ -1,8 +1,8 @@
 import path from 'node:path'
-import parseLink from './parseLink'
-import parseHTML from './parseHTML'
-import convert from './converter'
-import type { HtmlNodeObject, convertFuncType } from './types'
+import parseLink from './parseLink.js'
+import parseHTML from './parseHTML.js'
+import convert from './converter.js'
+import type { HtmlNodeObject, convertFuncType } from './types.js'
 
 const isInternalUri = (uri: string) => {
   return uri.indexOf('http://') === -1 && uri.indexOf('https://') === -1

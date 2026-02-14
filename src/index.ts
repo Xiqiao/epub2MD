@@ -1,5 +1,5 @@
-import parseEpub from './parseEpub'
-import parseLink from './parseLink'
-import parseHTML from './parseHTML'
+import parseEpub from './parseEpub.js'
+import parseLink from './parseLink.js'
+import parseHTML from './parseHTML.js'
 
 export { parseLink, parseHTML, parseEpub }

@@ -44,6 +44,17 @@
 
         <div class="card">
           <div class="card-header">
+            <h3>Raw non-EPUB list</h3>
+            <div class="inline-actions">
+              <button id="select-all-other" class="btn ghost">Select all</button>
+              <button id="convert-to-epub" class="btn">Convert to EPUB</button>
+            </div>
+          </div>
+          <ul id="raw-other-list" class="list"></ul>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
             <h3>Queue</h3>
             <div class="inline-actions">
               <button id="clear-queue" class="btn ghost">Clear</button>
@@ -77,6 +88,7 @@
             <h3>Books</h3>
             <div class="inline-actions">
               <button id="refresh-books" class="btn ghost">Refresh</button>
+              <button id="convert-books-simple" class="btn">繁转简</button>
               <button id="delete-book" class="btn danger">Delete book</button>
             </div>
           </div>

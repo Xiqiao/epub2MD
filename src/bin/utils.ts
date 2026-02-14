@@ -1,6 +1,6 @@
 import fg from 'fast-glob'
 import process from 'node:process'
-import logger from '../logger'
+import logger from '../logger.js'
 
 /**
  * Expands wildcard patterns to actual file paths
